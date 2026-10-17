@@ -42,7 +42,4 @@ app.use('/api/content',contentRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-
-
-
-
+export default app;
