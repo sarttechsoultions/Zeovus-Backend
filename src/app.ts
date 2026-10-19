@@ -15,6 +15,9 @@ import { errorHandler, notFound } from './middlewares/error.middleware.js';
 
 export const app = express();
 app.disable('x-powered-by');
+// Production requests arrive through the hosting proxy. Use the real visitor IP
+// for rate limiting instead of treating every Vercel request as one client.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
 app.use(compression());
@@ -28,8 +31,13 @@ app.get('/api/health', (_request, response) => {
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: env.NODE_ENV === 'development' ? 1000 : 100,
-  // Login has its own stricter limiter; browsing must not consume login attempts.
-  skip: request => request.path === '/admin/login',
+  // Login has its own stricter limiter. Public catalogue reads are normal page-load
+  // traffic and should not be blocked by the shared write/API limiter.
+  skip: request => request.path === '/admin/login' || (request.method === 'GET' && (
+    request.path === '/content/images' ||
+    request.path === '/products/catalogue' ||
+    request.path.startsWith('/products/catalogue/')
+  )),
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { success: false, message: 'Too many API requests. Please wait and try again.' },
