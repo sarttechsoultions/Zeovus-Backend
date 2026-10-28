@@ -1,3 +1,4 @@
+import {ensureCategory} from "../services/category.service.js";
 import type { RequestHandler } from 'express';
 import { createHash } from 'node:crypto';
 import { parseProductWorkbook } from '../services/product-import.service.js';
@@ -13,7 +14,7 @@ export const importProducts:RequestHandler=async(req,res)=>{
  if(!valid.length){res.json({success:true,created:0,skipped:duplicates.length,duplicates,errors:[]});return;}
  const batch=await ProductImport.create({filename:req.file.originalname,hash:createHash('sha256').update(req.file.buffer).digest('hex'),sheets:parsed.sheets});
  let created=0;const errors:{row:number;message:string}[]=[];
- for(const entry of valid){try{await ProductModel.create({...entry.product,importBatch:batch._id});created++;}catch(error){if((error as {code?:number}).code===11000)duplicates.push(String(entry.product.name));else {
+ for(const entry of valid){try{await ensureCategory(String(entry.product.category));await ProductModel.create({...entry.product,importBatch:batch._id});created++;}catch(error){if((error as {code?:number}).code===11000)duplicates.push(String(entry.product.name));else {
  const failure=error as {name?:string;errors?:Record<string,{kind?:string}>};
  const fields=failure.name==='ValidationError'?Object.keys(failure.errors||{}):[];
  errors.push({row:entry.row,message:fields.length?'Product validation failed for: '+fields.join(', ')+'.':'Could not save this product. Please check the database connection and retry.'});
