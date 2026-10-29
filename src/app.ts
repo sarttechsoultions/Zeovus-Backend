@@ -1,3 +1,4 @@
+import { newsletterRoutes } from "./newsletter.js";
 import {contentRoutes} from './modules/content/routes/content.routes.js';
 import {enquiryRoutes} from './modules/enquiries/routes/enquiry.routes.js';
 import { productImageDirectory } from './modules/products/controllers/product-image.controller.js';
@@ -47,6 +48,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/enquiries',enquiryRoutes);
 app.use('/api/content',contentRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 app.use(notFound);
 app.use(errorHandler);
 

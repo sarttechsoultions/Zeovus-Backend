@@ -2,6 +2,7 @@ import {catalogueCategories} from "../services/category.service.js";
 import type { RequestHandler } from "express";
 import { ProductModel } from "../models/product.model.js";
 import { z } from "zod";
+import { correctSearch } from "../services/search-spelling.js";
 
 export const publicProducts: RequestHandler = async (req, res) => {
   const parsed = z
@@ -11,15 +12,18 @@ export const publicProducts: RequestHandler = async (req, res) => {
       category: z.string().max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
       application: z.string().trim().min(1).max(200).optional(),
       subcategory: z.string().trim().min(1).max(200).optional(),
+      search: z.string().trim().max(200).optional(),
     })
     .safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ message: "Invalid filters" });
     return;
   }
-  const { page, limit, category, application, subcategory } = parsed.data;
+  const { page, limit, category, application, subcategory, search } = parsed.data;
+  const searchPattern = search?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const filter = {
     status: "published" as const,
+    ...(searchPattern ? { $or: ["name", "commonName", "summary", "description", "benefits", "category", "applicationTags", "applicationSubcategories.title", "applications.title", "sourceAndOrigin.label", "technicalSpecifications.rows.values"].map(field => ({ [field]: { $regex: searchPattern, $options: "i" } })) } : {}),
     ...(category ? { category } : {}),
     ...(application ? { applicationTags: application } : {}),
     ...(subcategory
@@ -33,6 +37,17 @@ export const publicProducts: RequestHandler = async (req, res) => {
         }
       : {}),
   };
+  let correctedSearch: string | undefined;
+  if (search && search.length >= 4 && !(await ProductModel.exists(filter))) {
+    const documents = await ProductModel.find({ status: "published" }).select("name commonName category benefits applicationTags applicationSubcategories.title").lean();
+    const vocabulary = documents.flatMap(document => [document.name, document.commonName || "", document.category, ...(document.benefits || []), ...(document.applicationTags || []), ...(document.applicationSubcategories || []).map(item => item.title || "")]);
+    const corrected = correctSearch(search, vocabulary);
+    if (corrected !== search.toLowerCase()) {
+      correctedSearch = corrected;
+      const pattern = corrected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = filter.$or?.map(condition => Object.fromEntries(Object.keys(condition).map(field => [field, { $regex: pattern, $options: "i" }])));
+    }
+  }
   const [data, total] = await Promise.all([
     ProductModel.find(filter)
       .sort({ createdAt: -1, _id: -1 })
@@ -44,6 +59,7 @@ export const publicProducts: RequestHandler = async (req, res) => {
   ]);
   res.json({
     success: true,
+    correctedSearch,
     data,
     pagination: { page, total, pages: Math.ceil(total / limit) },
   });
