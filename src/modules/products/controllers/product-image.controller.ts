@@ -1,6 +1,5 @@
 import multer from 'multer';
-import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { RequestHandler } from 'express';
 export const productImageDirectory=path.resolve(process.cwd(),'uploads/products');
@@ -17,8 +16,26 @@ export const uploadProductImages:RequestHandler=async(req,res)=>{
  if(!files?.length){res.status(400).json({message:'Choose at least one image.'});return;}
  const formats=files.map(file=>extension(file.buffer));
  if(formats.some(format=>!format)){res.status(400).json({message:'Only valid JPG, PNG, WebP and GIF images are accepted.'});return;}
- await mkdir(productImageDirectory,{recursive:true});
+ const cloud=process.env.CLOUDINARY_CLOUD_NAME;
+ const key=process.env.CLOUDINARY_API_KEY;
+ const secret=process.env.CLOUDINARY_API_SECRET;
+ if(!cloud||!key||!secret){res.status(503).json({message:'Cloudinary is not configured. Set the Cloudinary environment variables on the backend.'});return;}
  const images=[];
- for(let i=0;i<files.length;i++){const filename=randomUUID()+'.'+formats[i];await writeFile(path.join(productImageDirectory,filename),files[i].buffer,{flag:'wx'});images.push({url:'/api/product-images/'+filename,alt:files[i].originalname.replace(/\.[^.]+$/,'').slice(0,500)});}
+ try {
+ for(let i=0;i<files.length;i++){
+ const timestamp=String(Math.floor(Date.now()/1000));
+ const folder='zeovus-herbs/products';
+ const publicId=randomUUID();
+ const signature=createHash('sha1').update(`folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${secret}`).digest('hex');
+ const form=new FormData();
+ const mime={png:'image/png',jpg:'image/jpeg',gif:'image/gif',webp:'image/webp'}[formats[i]!]!;
+ form.append('file',new Blob([new Uint8Array(files[i].buffer)],{type:mime}),`${publicId}.${formats[i]}`);
+ form.append('api_key',key);form.append('timestamp',timestamp);form.append('folder',folder);form.append('public_id',publicId);form.append('signature',signature);
+ const response=await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloud)}/image/upload`,{method:'POST',body:form,signal:AbortSignal.timeout(25000)});
+ const result=await response.json() as {secure_url?:string};
+ if(!response.ok||!result.secure_url?.startsWith('https://res.cloudinary.com/'))throw new Error('Cloud upload failed');
+ images.push({url:result.secure_url,alt:files[i].originalname.replace(/\.[^.]+$/,'').slice(0,500)});
+ }
+ } catch {res.status(502).json({message:'Cloudinary upload failed. Check configuration and retry.'});return;}
  res.status(201).json({success:true,images});
 };
