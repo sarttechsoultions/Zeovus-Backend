@@ -29,7 +29,7 @@ export const productSchema = z
       .max(100)
       .optional(),
     summary: text.max(2000),
-    status: z.enum(["draft", "published"]).default("draft"),
+    status: z.enum(["draft", "published"]).default("published"),
     images: z
       .array(z.object({ url: asset, alt: text.max(500) }).strict())
       .min(1)

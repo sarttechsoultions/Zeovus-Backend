@@ -198,7 +198,7 @@ export async function parseProductWorkbook(buffer: Buffer) {
             ? "plant-proteins"
             : "collagen-gelatin",
         summary: description.slice(0, 1900),
-        status: "draft",
+        status: "published",
         images,
         description: description.split(/\n\s*\n/).filter(Boolean),
         applications: lines(source.Applications || "").map((title) => ({

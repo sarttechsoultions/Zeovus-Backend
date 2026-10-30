@@ -15,7 +15,7 @@ const productSchema = new Schema(
     slug: { type: String, required: true, unique: true },
     category: { type: String, required: true },
     summary: { type: String, required: true },
-    status: { type: String, enum: ["draft", "published"], default: "draft" },
+    status: { type: String, enum: ["draft", "published"], default: "published" },
     images: [{ _id: false, url: String, alt: String }],
     description: [String],
     applications: [{ _id: false, title: String, icon: String }],
